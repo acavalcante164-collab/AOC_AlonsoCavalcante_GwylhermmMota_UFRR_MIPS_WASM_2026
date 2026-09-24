@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Calculadora MIPS-WASM</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9; }
+        .painel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+        input { padding: 10px; margin: 5px; width: 80px; text-align: center; font-size: 16px;}
+        button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;}
+        button:hover { background: #0056b3; }
+        .binario { font-family: monospace; background: #222; color: #0f0; padding: 10px; border-radius: 5px; letter-spacing: 2px; word-break: break-all;}
+    </style>
+</head>
+<body>
+    <div class="painel">
+        <h2>Simulador de Aritmética WASM</h2>
+        
+        <!-- Entradas do usuário -->
+        <input type="number" id="inputA" value="5">
+        <span>+</span>
+        <input type="number" id="inputB" value="-3">
+        <button onclick="calcular()">Somar</button>
+
+        <hr>
+
+        <!-- Onde vamos mostrar os resultados -->
+        <h3>Resultados:</h3>
+        <p><strong>Decimal:</strong> <span id="resultadoDecimal">-</span></p>
+        
+        <p><strong>Binário (Valor A):</strong></p>
+        <div id="binarioA" class="binario">00000000000000000000000000000000</div>
+        
+        <p><strong>Binário (Valor B):</strong></p>
+        <div id="binarioB" class="binario">00000000000000000000000000000000</div>
+        
+        <p><strong>Binário (Resultado):</strong></p>
+        <div id="binarioResult" class="binario">00000000000000000000000000000000</div>
+    </div>
+
+    <div id="alerta" style="display: none; background: red; color: white; padding: 10px; margin-top: 10px; border-radius: 5px; font-weight: bold;">
+    ⚠️ ALERTA DE OVERFLOW DETETADO!
+    </div>
+
+    <script>
+        // Variável global para guardar as funções do C
+        let wasmExports = null;
+
+        // 1. Carrega o WASM assim que a página abre
+        async function carregarWASM() {
+            const resposta = await fetch('aritmetica.wasm');
+            const buffer = await resposta.arrayBuffer();
+            const modulo = await WebAssembly.instantiate(buffer);
+            wasmExports = modulo.instance.exports;
+        }
+        carregarWASM();
+
+        // 2. Função mágica para converter em 32 bits binários
+        function paraBinario(numero) {
+            return (numero >>> 0).toString(2).padStart(32, '0');
+        }
+
+        // 3. Função que roda quando clicamos no botão
+        function calcular() {
+    if (!wasmExports) {
+        alert("Aguarde, o WASM ainda está a carregar...");
+        return;
+    }
+
+    let a = parseInt(document.getElementById('inputA').value);
+    let b = parseInt(document.getElementById('inputB').value);
+
+    // 1. Definimos o endereço de memória 0 para o nosso ponteiro bool*
+    let enderecoPonteiro = 0;
+
+    // 2. Chamamos a SOMA SEGURA, passando o endereço
+    let resultado = wasmExports.soma_segura(a, b, enderecoPonteiro);
+
+    // 3. Lemos a memória do WASM para ver o que ele colocou na gaveta 0
+    let memoriaWASM = new Uint8Array(wasmExports.memory.buffer);
+    let ocorreuOverflow = memoriaWASM[enderecoPonteiro] === 1;
+
+    // 4. Atualizamos a interface
+    document.getElementById('resultadoDecimal').innerText = resultado;
+    document.getElementById('binarioA').innerText = paraBinario(a);
+    document.getElementById('binarioB').innerText = paraBinario(b);
+    document.getElementById('binarioResult').innerText = paraBinario(resultado);
+
+    // 5. Mostramos ou escondemos o alerta visual!
+    let caixaAlerta = document.getElementById('alerta');
+    if (ocorreuOverflow) {
+        caixaAlerta.style.display = "block";
+    } else {
+        caixaAlerta.style.display = "none";
+    }
+}
+    </script>
+</body>
+</html>
