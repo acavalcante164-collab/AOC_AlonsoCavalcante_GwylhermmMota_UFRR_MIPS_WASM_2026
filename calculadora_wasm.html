@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calculadora Aritmética · C → WebAssembly</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0f14;
+  --bg-grid: #131a22;
+  --panel: #101720;
+  --panel-border: #1f2b38;
+  --text: #e8eef4;
+  --text-muted: #7d8fa3;
+  --accent: #2fe6c9;
+  --accent-dim: #1a8f7d;
+  --amber: #f2b84b;
+  --red: #ef5b5b;
+  --radius: 10px;
+}
+:root:not([data-theme="light"]) { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(47,230,201,0.08) 1px, transparent 0) 0 0/24px 24px,
+    var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  min-height: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 560px;
+  padding: 2.5rem 1.25rem 3rem;
+}
+
+.eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.eyebrow .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(47,230,201,0.6);
+  animation: pulse-dot 2.4s ease-out infinite;
+}
+@keyframes pulse-dot {
+  0%   { box-shadow: 0 0 0 0 rgba(47,230,201,0.55); }
+  70%  { box-shadow: 0 0 0 8px rgba(47,230,201,0); }
+  100% { box-shadow: 0 0 0 0 rgba(47,230,201,0); }
+}
+
+h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.3rem;
+  letter-spacing: -0.01em;
+}
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  margin: 0 0 2rem;
+  line-height: 1.5;
+}
+.subtitle code {
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(47,230,201,0.08);
+  color: var(--accent);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.6;
+}
+
+.operands {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 0.75rem;
+  margin-bottom: 1.4rem;
+}
+.field label {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  margin-bottom: 0.4rem;
+}
+.field input {
+  width: 100%;
+  background: #0a0e13;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.25rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(47,230,201,0.12);
+}
+.operator-symbol {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.6rem;
+  color: var(--accent);
+  padding-bottom: 0.6rem;
+  min-width: 1.4rem;
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+
+.ops {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.op-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.6rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.op-btn:hover { border-color: var(--accent-dim); color: var(--text); }
+.op-btn.active {
+  background: rgba(47,230,201,0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.9rem;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  margin-bottom: 1.4rem;
+}
+.toggle-row .label-group { display: flex; flex-direction: column; gap: 0.1rem; }
+.toggle-row .label-main { font-size: 0.88rem; }
+.toggle-row .label-sub { font-size: 0.75rem; color: var(--text-muted); }
+
+.switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; inset: 0;
+  background: #2a3542;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 18px; width: 18px;
+  left: 3px; top: 3px;
+  background: #cdd8e3;
+  border-radius: 50%;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.switch input:checked + .slider { background: var(--accent-dim); }
+.switch input:checked + .slider::before {
+  transform: translateX(18px);
+  background: var(--accent);
+}
+
+.calc-btn {
+  width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.8rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #04211c;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.calc-btn:hover { background: #4bf0d6; box-shadow: 0 4px 16px rgba(47,230,201,0.18); }
+.calc-btn:active { transform: scale(0.98); }
+.calc-btn:disabled { opacity: 0.5; cursor: progress; }
+
+.result {
+  margin-top: 1.5rem;
+  border-top: 1px dashed var(--panel-border);
+  padding-top: 1.4rem;
+  display: none;
+}
+.result.show { display: block; animation: fade-in 0.3s ease; }
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.result-main {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 2.1rem;
+  font-weight: 700;
+  color: var(--accent);
+  word-break: break-all;
+  transition: color 0.2s ease;
+}
+.result-main.overflow { color: var(--red); }
+
+.result-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.9rem;
+  margin-top: 0.9rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+.result-grid dt { color: var(--text-muted); }
+.result-grid dd { margin: 0; color: var(--text); word-break: break-all; letter-spacing: 0.02em; }
+
+.overflow-banner {
+  margin-top: 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  background: rgba(239,91,91,0.1);
+  border: 1px solid rgba(239,91,91,0.4);
+  color: #ffb3b3;
+  font-size: 0.85rem;
+  display: none;
+  align-items: center;
+  gap: 0.55rem;
+}
+.overflow-banner.show { display: flex; }
+.overflow-banner .spark {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--red); flex-shrink: 0;
+  animation: pulse-dot 1.2s ease-out infinite;
+}
+
+.status-line {
+  margin-top: 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.status-line .led {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #4a5768;
+}
+.status-line.ready .led { background: var(--accent); }
+.status-line.error .led { background: var(--red); }
+
+.error-msg {
+  color: var(--red);
+  font-size: 0.82rem;
+  margin-top: 0.6rem;
+  display: none;
+}
+.error-msg.show { display: block; }
+
+footer {
+  margin-top: 1.75rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  text-align: center;
+}
+footer code {
+  font-family: 'JetBrains Mono', monospace;
+  color: #97a7b8;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow"><span class="dot"></span> WEBASSEMBLY · MÓDULO NATIVO EM C</div>
+  <h1>Calculadora Aritmética</h1>
+  <p class="subtitle">Compilado de <code>aritmetica.c</code> para <code>.wasm</code> e executado direto no navegador — sem servidor, sem interpretação. Alterna entre operação simples e verificação de overflow em complemento de dois, como a ULA faria.</p>
+
+  <div class="card">
+    <div class="operands">
+      <div class="field">
+        <label for="opA">OPERANDO A</label>
+        <input type="number" id="opA" value="10" inputmode="numeric">
+      </div>
+      <div class="operator-symbol" id="opSymbol">+</div>
+      <div class="field">
+        <label for="opB">OPERANDO B</label>
+        <input type="number" id="opB" value="25" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="ops">
+      <button class="op-btn active" data-op="soma" data-symbol="+">SOMA</button>
+      <button class="op-btn" data-op="sub" data-symbol="&minus;">SUBTRAÇÃO</button>
+      <button class="op-btn" data-op="mul" data-symbol="&times;">MULTIPLICAÇÃO</button>
+    </div>
+
+    <div class="toggle-row">
+      <div class="label-group">
+        <span class="label-main">Modo seguro</span>
+        <span class="label-sub">detecta overflow de int32 (soma_segura / sub_segura / mul_segura)</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="modoSeguro" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <button class="calc-btn" id="calcBtn" disabled>CARREGANDO WASM…</button>
+    <p class="error-msg" id="errorMsg"></p>
+
+    <div class="result" id="resultBox">
+      <div class="result-main" id="resultMain">0</div>
+      <dl class="result-grid">
+        <dt>hex</dt><dd id="resultHex">0x00000000</dd>
+        <dt>bin</dt><dd id="resultBin">0000 0000 0000 0000 0000 0000 0000 0000</dd>
+        <dt>função</dt><dd id="resultFn">soma</dd>
+      </dl>
+      <div class="overflow-banner" id="overflowBanner">
+        <span class="spark"></span>
+        <span>Overflow detectado — o resultado real excede a faixa representável em int32 (complemento de dois).</span>
+      </div>
+    </div>
+
+    <div class="status-line" id="statusLine"><span class="led"></span><span id="statusText">inicializando módulo…</span></div>
+  </div>
+
+  <footer>
+    Funções exportadas do módulo: <code>soma</code>, <code>sub</code>, <code>mul</code>, <code>soma_segura</code>, <code>sub_segura</code>, <code>mul_segura</code>.<br>
+    A detecção de overflow compara os sinais dos operandos com o sinal do resultado — o mesmo princípio usado por flags de overflow em ULAs reais.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- módulo WASM embutido em base64 (aritmetica.wasm, gerado a partir de aritmetica.c) ----
+  const WASM_B64 = "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";
+
+  // Endereço de memória (dentro do heap, nunca usado pelo módulo já que não há malloc)
+  // usado como escrátch pra passar o ponteiro bool* teve_overflow.
+  const OVERFLOW_PTR = 66560;
+
+  const opSymbols = { soma: "+", sub: "\u2212", mul: "\u00d7" };
+  const opNames   = { soma: "soma", sub: "sub", mul: "mul" };
+
+  let wasmExports = null;
+  let currentOp = "soma";
+
+  const $ = (id) => document.getElementById(id);
+  const calcBtn = $("calcBtn");
+  const statusLine = $("statusLine");
+  const statusText = $("statusText");
+  const errorMsg = $("errorMsg");
+  const resultBox = $("resultBox");
+  const resultMain = $("resultMain");
+  const resultHex = $("resultHex");
+  const resultBin = $("resultBin");
+  const resultFn = $("resultFn");
+  const overflowBanner = $("overflowBanner");
+  const opSymbolEl = $("opSymbol");
+  const modoSeguro = $("modoSeguro");
+
+  function base64ToBytes(b64) {
+    const binStr = atob(b64);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    return bytes;
+  }
+
+  function toHex32(n) {
+    const u = n >>> 0;
+    return "0x" + u.toString(16).toUpperCase().padStart(8, "0");
+  }
+
+  function toBin32(n) {
+    const u = n >>> 0;
+    const s = u.toString(2).padStart(32, "0");
+    return s.replace(/(.{4})(?=.)/g, "$1 ");
+  }
+
+  function setStatus(mode, text) {
+    statusLine.className = "status-line" + (mode ? " " + mode : "");
+    statusText.textContent = text;
+  }
+
+  function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.classList.add("show");
+    resultBox.classList.remove("show");
+  }
+
+  function clearError() {
+    errorMsg.classList.remove("show");
+    errorMsg.textContent = "";
+  }
+
+  async function initWasm() {
+    try {
+      const bytes = base64ToBytes(WASM_B64);
+      const { instance } = await WebAssembly.instantiate(bytes.buffer, {});
+      wasmExports = instance.exports;
+      calcBtn.disabled = false;
+      calcBtn.textContent = "CALCULAR";
+      setStatus("ready", "módulo carregado — " + bytes.length + " bytes de WASM em execução");
+    } catch (erro) {
+      setStatus("error", "falha ao instanciar o módulo WASM");
+      showError("Não foi possível carregar o módulo: " + erro.message);
+      console.error("Erro ao instanciar WASM:", erro);
+    }
+  }
+
+  function calcular() {
+    clearError();
+    const a = parseInt($("opA").value, 10);
+    const b = parseInt($("opB").value, 10);
+
+    if (Number.isNaN(a) || Number.isNaN(b)) {
+      showError("Digite dois números inteiros válidos em A e B.");
+      return;
+    }
+    if (!wasmExports) {
+      showError("O módulo WASM ainda não terminou de carregar.");
+      return;
+    }
+
+    const seguro = modoSeguro.checked;
+    let resultado, overflow = false;
+
+    if (seguro) {
+      const view = new Uint8Array(wasmExports.memory.buffer);
+      view[OVERFLOW_PTR] = 0;
+      if (currentOp === "soma") resultado = wasmExports.soma_segura(a, b, OVERFLOW_PTR);
+      else if (currentOp === "sub") resultado = wasmExports.sub_segura(a, b, OVERFLOW_PTR);
+      else resultado = wasmExports.mul_segura(a, b, OVERFLOW_PTR);
+      overflow = view[OVERFLOW_PTR] !== 0;
+    } else {
+      if (currentOp === "soma") resultado = wasmExports.soma(a, b);
+      else if (currentOp === "sub") resultado = wasmExports.sub(a, b);
+      else resultado = wasmExports.mul(a, b);
+    }
+
+    resultMain.textContent = resultado.toString();
+    resultMain.classList.toggle("overflow", overflow);
+    resultHex.textContent = toHex32(resultado);
+    resultBin.textContent = toBin32(resultado);
+    resultFn.textContent = seguro ? opNames[currentOp] + "_segura" : opNames[currentOp];
+    overflowBanner.classList.toggle("show", overflow);
+    resultBox.classList.add("show");
+  }
+
+  document.querySelectorAll(".op-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".op-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentOp = btn.dataset.op;
+      opSymbolEl.innerHTML = btn.dataset.symbol;
+    });
+  });
+
+  calcBtn.addEventListener("click", calcular);
+  [$("opA"), $("opB")].forEach((input) => {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") calcular();
+    });
+  });
+
+  setStatus("", "inicializando módulo…");
+  initWasm();
+})();
+</script>
+</body>
+</html>
